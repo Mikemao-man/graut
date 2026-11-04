@@ -365,25 +365,37 @@ function launchDice(){ const sky = document.getElementById('sky'); if (!sky) ret
   for (let i = 0; i < 12; i++) { const d = document.createElement('div'), size = 26 + Math.random() * 44; d.className = 'fly'; d.innerHTML = dieSvg(1 + Math.floor(Math.random() * 6));
     d.style.cssText = `left:${Math.random() * 100}%;width:${size}px;height:${size}px;--d:${9 + Math.random() * 10}s;--delay:${-Math.random() * 18}s;--dx:${(Math.random() - .5) * 60}vw;--rot:${(Math.random() < .5 ? -1 : 1) * (360 + Math.random() * 1080)}deg;--glow:${glows[i % 3]}`;
     sky.append(d) } }
-// Tilfeldige LP-cover fra tiåret (MusicBrainz + Cover Art Archive). Feiler det, vises bare terningene.
+function jsonp(url){ return new Promise((ok, no) => { const cb = 'cb' + Math.random().toString(36).slice(2), sc = document.createElement('script');
+  const t = setTimeout(() => { delete window[cb]; sc.remove(); no(new Error('timeout')) }, 8000);
+  window[cb] = d => { clearTimeout(t); delete window[cb]; sc.remove(); ok(d) }; sc.onerror = () => { clearTimeout(t); no(new Error('jsonp')) };
+  sc.src = url + '&callback=' + cb; document.head.append(sc) }) }
+const COVER_TAGS = ['rock','pop','soul','funk','disco','new wave','punk','hard rock','singer-songwriter','hip hop','electronic','country','jazz','metal'];
+async function mbCovers(decade){ const tag = COVER_TAGS[Math.floor(Math.random() * COVER_TAGS.length)];
+  const q = n => `https://musicbrainz.org/ws/2/release-group?fmt=json&limit=100&offset=${n}&query=` + encodeURIComponent(`firstreleasedate:[${decade} TO ${decade + 9}] AND primarytype:album AND tag:"${tag}"`);
+  let j = await (await fetch(q(Math.floor(Math.random() * 120)))).json();
+  if (!j['release-groups']?.length) j = await (await fetch(q(0))).json();
+  return (j['release-groups'] || []).map(g => `https://coverartarchive.org/release-group/${g.id}/front-250`) }
+async function itunesCovers(decade){ const terms = ['rock','pop','soul','disco','punk','metal','funk','country','reggae','blues','new wave','hip hop','dance','folk'];
+  const out = []; for (const t of shuffle(terms).slice(0, 3)) { try { const d = await jsonp(`https://itunes.apple.com/search?media=music&entity=album&limit=200&term=${encodeURIComponent(t)}`);
+    (d.results || []).forEach(a => { const y = +String(a.releaseDate).slice(0, 4); if (y >= decade && y <= decade + 9 && a.artworkUrl100) out.push(a.artworkUrl100.replace('100x100bb', '300x300bb')) }) } catch {} }
+  return out }
+// Tilfeldige LP-cover fra tiåret. Feiler alt, vises bare terningene.
 let coverDecade = null;
 async function loadCovers(decade){
   if (decade === coverDecade) return; coverDecade = decade;
   const sky = document.getElementById('sky'); if (!sky || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   sky.querySelectorAll('.cover').forEach(c => c.remove());
-  const tags = ['rock','pop','soul','funk','disco','new wave','punk','hard rock','singer-songwriter','hip hop','electronic','country','jazz','metal'];
-  const q = n => `https://musicbrainz.org/ws/2/release-group?fmt=json&limit=100&offset=${n}&query=` + encodeURIComponent(`firstreleasedate:[${decade} TO ${decade + 9}] AND primarytype:album AND tag:"${tags[Math.floor(Math.random() * tags.length)]}"`);
-  try { let j = await (await fetch(q(Math.floor(Math.random() * 150)))).json();
-    if (!j['release-groups']?.length) j = await (await fetch(q(0))).json();
-    const ids = shuffle((j['release-groups'] || []).map(g => g.id)); const glows = ['#ff2bd6','#22f3ff','#ffcf3f']; let shown = 0;
-    for (const id of ids) { if (shown >= 8 || decade !== coverDecade) break;
-      const img = new Image(); img.alt = ''; img.referrerPolicy = 'no-referrer';
-      const ok = await new Promise(res => { img.onload = () => res(true); img.onerror = () => res(false); img.src = `https://coverartarchive.org/release-group/${id}/front-250`; setTimeout(() => res(false), 6000) });
-      if (!ok || decade !== coverDecade) continue;
+  const glows = ['#ff2bd6','#22f3ff','#ffcf3f']; let shown = 0;
+  const add = src => { if (shown >= 8 || decade !== coverDecade) return; const img = new Image(); img.alt = ''; img.referrerPolicy = 'no-referrer';
+    img.onload = () => { if (shown >= 8 || decade !== coverDecade) return;
       const d = document.createElement('div'), size = 90 + Math.random() * 70; d.className = 'fly cover'; d.append(img);
       d.style.cssText = `left:${Math.random() * 90}%;width:${size}px;height:${size}px;--d:${16 + Math.random() * 12}s;--delay:${-Math.random() * 20}s;--dx:${(Math.random() - .5) * 40}vw;--rot:${(Math.random() < .5 ? -1 : 1) * (40 + Math.random() * 140)}deg;--glow:${glows[shown % 3]}`;
-      sky.append(d); shown++ }
-  } catch (e) { console.warn('Fikk ikke hentet LP-cover', e) }
+      sky.append(d); shown++ };
+    img.src = src };
+  let mb = []; try { mb = shuffle(await mbCovers(decade)) } catch (e) { console.warn('MusicBrainz feilet', e) }
+  mb.slice(0, 40).forEach(add);
+  setTimeout(async () => { if (shown >= 4 || decade !== coverDecade) return; // reserve: iTunes
+    try { shuffle(await itunesCovers(decade)).slice(0, 20).forEach(add) } catch (e) { console.warn('iTunes feilet', e) } }, mb.length ? 7000 : 0);
 }
 async function boot(){ launchDice();
   if (SUPABASE_URL) { await new Promise((ok, no) => { const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js'; s.onload = ok; s.onerror = no; document.head.append(s) });
