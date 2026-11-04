@@ -67,9 +67,12 @@ button:disabled{opacity:.4;cursor:not-allowed}
   <div id="app"></div>
 </main>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async></script>
 <script>
 // ===== Oppsett: fyll inn for delt database (Supabase). Tomt = lokal testmodus (fungerer berre mellom faner i same nettlesar). =====
 const SUPABASE_URL = 'https://utlpxrjniermyvvuzjwi.supabase.co';
+// Google OAuth-klient-ID (offentlig) for å lagre spillelister i brukerens egen YouTube. Tom = knappen vises ikke.
+const GOOGLE_CLIENT_ID = '';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV0bHB4cmpuaWVybXl2dnV6andpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM4MDY1NzQsImV4cCI6MjEwOTM4MjU3NH0.sA_HSIf9C240tj71d76jkG23nOmpC7yTavoPHMaPrDg'; // offentleg nøkkel, trygg å ha i nettlesaren
 
 const MAX_SIX = 2, SONGS = 3;
@@ -153,12 +156,33 @@ const ranking = () => st.room.order.slice(0, st.room.phase === 'done' ? undefine
 const PITCH = ['Overbevis oss!', 'Hvorfor fortjener denne en sekser?', 'Selg den inn!', 'Hva er historien bak?', 'Gi oss ett godt argument!'];
 
 // YouTube lager en midlertidig spilleliste av video-ID-ene. Den kan lagres i YouTube med kåringsnavnet.
-function playlistBtn(songs, label = 'Åpne alle låtene som YouTube-spilleliste', red = false){
+function playlistBtn(songs, label = 'Åpne alle låtene som YouTube-spilleliste', red = false, name = st?.room?.name){
   if (!songs.length) return '';
-  const url = playlistUrl(songs);
-  return `<a href="${url}" target="_blank" rel="noopener" style="display:block;margin-top:10px"><button class="${red ? '' : 'ghost'}" style="width:100%;${red ? 'background:#ff0033;color:#fff' : ''}">▶ ${label}</button></a>
-    <p class="muted center" style="margin:6px 0 0">Lagre den i YouTube og kall den «${esc(st.room.name)}».</p>`;
+  const key = 'p' + Object.keys(PL).length; PL[key] = {name, ids:songs.slice(0, 50).map(s => s.yt)};
+  return `<a href="${playlistUrl(songs)}" target="_blank" rel="noopener" style="display:block;margin-top:10px"><button class="${red ? '' : 'ghost'}" style="width:100%;${red ? 'background:#ff0033;color:#fff' : ''}">▶ ${label}</button></a>
+    ${GOOGLE_CLIENT_ID ? `<button class="ghost" style="width:100%;margin-top:8px" onclick="saveYT('${key}', this)">＋ Lagre som spilleliste i min YouTube</button>`
+      : `<p class="muted center" style="margin:6px 0 0">Lagre den i YouTube og kall den «${esc(name)}».</p>`}`;
 }
+// ===== Lagre spilleliste på kontoen til den som trykker (Google-innlogging) =====
+const PL = {};
+let ytToken = null, tokenClient = null;
+function getToken(){ return new Promise((ok, no) => {
+  if (ytToken && ytToken.exp > Date.now()) return ok(ytToken.t);
+  if (!window.google?.accounts?.oauth2) return no(new Error('Google-innloggingen er ikke lastet ennå. Prøv igjen om et øyeblikk.'));
+  tokenClient = google.accounts.oauth2.initTokenClient({client_id:GOOGLE_CLIENT_ID, scope:'https://www.googleapis.com/auth/youtube',
+    callback:r => r.error ? no(new Error('Innloggingen ble avbrutt.')) : (ytToken = {t:r.access_token, exp:Date.now() + (r.expires_in - 60) * 1000}, ok(r.access_token)),
+    error_callback:() => no(new Error('Innloggingen ble avbrutt.'))});
+  tokenClient.requestAccessToken();
+}) }
+async function ytApi(path, token, body){ const res = await fetch('https://www.googleapis.com/youtube/v3/' + path, {method:'POST', headers:{Authorization:'Bearer ' + token, 'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  const j = await res.json(); if (!res.ok) throw new Error(j.error?.message || 'YouTube sa nei.'); return j }
+async function saveYT(key, btn){ const p = PL[key]; const old = btn.textContent; btn.disabled = true;
+  try { const token = await getToken(); btn.textContent = 'Lager spillelisten…';
+    const list = await ytApi('playlists?part=snippet,status', token, {snippet:{title:p.name || 'Graut kåringen', description:'Laget med Graut kåringen'}, status:{privacyStatus:'private'}});
+    for (let i = 0; i < p.ids.length; i++) { btn.textContent = `Legger til låt ${i+1} av ${p.ids.length}…`;
+      await ytApi('playlistItems?part=snippet', token, {snippet:{playlistId:list.id, resourceId:{kind:'youtube#video', videoId:p.ids[i]}}}) }
+    btn.outerHTML = `<a href="https://www.youtube.com/playlist?list=${list.id}" target="_blank" rel="noopener" style="display:block;margin-top:8px"><button style="width:100%">✓ Lagret i din YouTube – åpne spillelisten</button></a>`;
+  } catch (e) { btn.disabled = false; btn.textContent = old; alert(e.message) } }
 function resultsHtml(){
   const r = ranking(); if (!r.length) return '';
   return r.map((x, i) => `<div class="card song"><span class="rank">${i+1}</span><div style="flex:1;min-width:0"><b>${esc(x.s.title)}</b><span class="muted">${esc(x.s.artist)} · ${x.s.year} · ${esc(owner(x.s)?.name)}</span>
@@ -185,7 +209,7 @@ async function loadSaved(){ const el = document.getElementById('saved'); if (!el
     el.innerHTML = `<h2>Kåringer</h2>` + list.map(({room, songs, votes}) => { const done = room.phase === 'done';
       return `<div class="card"><div class="song"><div style="min-width:0"><b>${esc(room.name)}</b><span class="muted">${room.decade}-tallet · ${songs.length} låter · ${PHASE[room.phase] || 'Pågår'}</span></div>
         <button class="ghost" style="flex:none" onclick="go('vert/${room.code}')">Åpne</button></div>
-        <a href="${playlistUrl(done ? rankSongs(songs, votes) : songs)}" target="_blank" rel="noopener" style="display:block;margin-top:10px"><button style="width:100%;background:#ff0033;color:#fff">▶ ${done ? 'Vinnerlisten på YouTube' : 'Alle låtene på YouTube'}</button></a></div>` }).join('');
+        ${playlistBtn(done ? rankSongs(songs, votes) : songs, done ? 'Vinnerlisten på YouTube' : 'Alle låtene på YouTube', true, room.name)}</div>` }).join('');
   } catch (e) { console.error(e) } }
 function myRooms(){ try { return JSON.parse(ls.get('mk.mine')) || [] } catch { return [] } }
 async function createRoom(){
