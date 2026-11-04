@@ -91,34 +91,14 @@ button.yt-btn{background:var(--red);color:#fff;box-shadow:0 0 18px #ff2340aa}
 #sky .fly{position:absolute;bottom:-90px;display:grid;place-items:center;background:#f4f1ea;border-radius:18%;opacity:.32;
   box-shadow:0 0 18px var(--glow);animation:fly var(--d) linear var(--delay) infinite}
 #sky .fly svg{width:80%;height:80%}
+#sky .fly.cover{background:#111;border-radius:3px;opacity:.42;box-shadow:0 0 22px var(--glow),0 0 2px #fff}
+#sky .fly.cover img{width:100%;height:100%;object-fit:cover;display:block;border-radius:3px}
 @keyframes fly{0%{transform:translate(0,0) rotate(0)}100%{transform:translate(var(--dx),calc(-100vh - 180px)) rotate(var(--rot))}}
-/* Magedansere */
-.dancer{position:fixed;bottom:0;z-index:1;pointer-events:none;width:clamp(70px,12vw,150px);filter:drop-shadow(0 0 10px var(--pink)) drop-shadow(0 0 26px #ff2bd655)}
-.dancer.l{left:2px}.dancer.r{right:2px;transform:scaleX(-1)}
-.dancer svg{display:block;width:100%;overflow:visible}
-.dancer .body{animation:bob 1.2s ease-in-out infinite alternate;transform-origin:70px 214px}
-.dancer.r .body{animation-delay:-.6s}
-.dancer .hips{animation:shimmy .45s ease-in-out infinite alternate;transform-origin:70px 96px}
-.dancer .veil{fill:#ff2bd640;stroke:var(--pink);stroke-width:1.5;animation:veil 1.6s ease-in-out infinite alternate;transform-origin:70px 40px}
-.dancer .skin,.dancer .skin-f{stroke:#e8b48a;fill:#c98e66}.dancer .skin-f{stroke-width:.8}
-.dancer .hair{fill:#1a0a10;stroke:#3b1626;stroke-width:1}
-.dancer .top{fill:var(--gold);stroke:#fff3c4;stroke-width:1}
-.dancer .navel{fill:#7a4a30}
-.dancer .skirt{fill:#ff2bd655;stroke:var(--pink);stroke-width:2}
-.dancer .slit{stroke:var(--pink);stroke-width:1.5}
-.dancer .belt{fill:var(--cyan);stroke:#bffcff;stroke-width:1}
-.dancer .coins circle{fill:var(--gold);stroke:#fff3c4;stroke-width:.6;animation:jingle .22s linear infinite alternate}
-@keyframes bob{0%{transform:translateY(0) rotate(-2deg)}100%{transform:translateY(-6px) rotate(2deg)}}
-@keyframes shimmy{0%{transform:rotate(-7deg) translateX(-3px)}100%{transform:rotate(7deg) translateX(3px)}}
-@keyframes veil{0%{transform:rotate(-6deg) scaleY(.92)}100%{transform:rotate(6deg) scaleY(1.06)}}
-@keyframes jingle{to{transform:translateY(1.5px)}}
-@media(max-width:700px){.dancer{opacity:.55}}
-@media(prefers-reduced-motion:reduce){#sky{display:none}h1,.marquee,.dancer *{animation:none!important}}
+@media(prefers-reduced-motion:reduce){#sky{display:none}h1,.marquee{animation:none!important}}
 </style>
 </head>
 <body>
 <div id="sky" aria-hidden="true"></div>
-<div class="dancer l" aria-hidden="true"></div><div class="dancer r" aria-hidden="true"></div>
 <main>
   <div id="ytwrap" hidden><div id="ytplayer"></div></div>
   <div id="app"></div>
@@ -362,8 +342,9 @@ document.addEventListener('input', e => { const i = e.target; if (route.view ===
   let d = {}; try { d = JSON.parse(ls.get(draftKey())) || {} } catch {} d[i.id] = i.value; ls.set(draftKey(), JSON.stringify(d)) });
 function render(){
   const el = document.getElementById('app'); document.body.classList.toggle('host', route.view === 'vert');
-  if (!route.code) { document.getElementById('ytwrap').hidden = true; el.innerHTML = homeView(); loadSaved(); return }
+  if (!route.code) { document.getElementById('ytwrap').hidden = true; el.innerHTML = homeView(); loadSaved(); loadCovers(coverDecade ?? [1960,1970,1980,1990,2000][Math.floor(Math.random() * 5)]); return }
   if (!st) { el.innerHTML = `<h1>Fant ikke rommet ${esc(route.code)}</h1><button onclick="go('')">Tilbake</button>`; return }
+  loadCovers(st.room.decade);
   const key = JSON.stringify([route.view, st.room.phase, st.room.idx, st.players.length, st.songs.length, st.votes]);
   if (key === lastKey) return;
   // Ikkje teikn skjemaet på nytt medan deltakaren skriv i det
@@ -380,25 +361,31 @@ function onRoute(){
   if (!route.code) return render();
   refresh().then(() => { if (st) unsub = api.subscribe(st.room.id, refresh) });
 }
-const DANCER = `<svg viewBox="0 0 140 220" aria-hidden="true"><g class="body">
-<path class="veil" d="M18 40 C40 -6 100 -6 122 40 C104 22 36 22 18 40Z"/>
-<path class="skin" d="M50 60 L22 38 M90 60 L118 38" stroke-width="5" stroke-linecap="round" fill="none"/>
-<circle class="skin-f" cx="70" cy="30" r="13"/>
-<path class="hair" d="M57 28 C56 10 84 10 83 28 C88 40 90 60 84 70 C82 52 80 40 76 34 M57 28 C52 42 52 58 56 68"/>
-<rect class="skin-f" x="66" y="42" width="8" height="8"/>
-<path class="skin-f" d="M52 52 C60 48 80 48 88 52 L84 70 C80 80 79 88 82 96 L58 96 C61 88 60 80 56 70Z"/>
-<path class="top" d="M52 56 C56 50 68 52 69 60 C69 66 56 68 52 62Z M88 56 C84 50 72 52 71 60 C71 66 84 68 88 62Z"/>
-<circle class="navel" cx="70" cy="84" r="1.4"/>
-<g class="hips"><path class="skirt" d="M56 96 L84 96 C100 140 112 180 120 214 L20 214 C28 180 40 140 56 96Z"/>
-<path class="belt" d="M54 92 C62 98 78 98 86 92 L90 104 C78 110 62 110 50 104Z"/>
-<g class="coins">${[52,58,64,70,76,82,88].map((x,i)=>`<circle cx="${x}" cy="${108+(i%2)*3}" r="2.6"/>`).join('')}</g>
-<path class="slit" d="M70 112 L66 214"/></g></g></svg>`;
-function launchDancers(){ document.querySelectorAll('.dancer').forEach(d => d.innerHTML = DANCER) }
 function launchDice(){ const sky = document.getElementById('sky'); if (!sky) return; const glows = ['#ff2bd6','#22f3ff','#ffcf3f'];
   for (let i = 0; i < 12; i++) { const d = document.createElement('div'), size = 26 + Math.random() * 44; d.className = 'fly'; d.innerHTML = dieSvg(1 + Math.floor(Math.random() * 6));
     d.style.cssText = `left:${Math.random() * 100}%;width:${size}px;height:${size}px;--d:${9 + Math.random() * 10}s;--delay:${-Math.random() * 18}s;--dx:${(Math.random() - .5) * 60}vw;--rot:${(Math.random() < .5 ? -1 : 1) * (360 + Math.random() * 1080)}deg;--glow:${glows[i % 3]}`;
     sky.append(d) } }
-async function boot(){ launchDice(); launchDancers();
+// Tilfeldige LP-cover fra tiåret (MusicBrainz + Cover Art Archive). Feiler det, vises bare terningene.
+let coverDecade = null;
+async function loadCovers(decade){
+  if (decade === coverDecade) return; coverDecade = decade;
+  const sky = document.getElementById('sky'); if (!sky || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  sky.querySelectorAll('.cover').forEach(c => c.remove());
+  const tags = ['rock','pop','soul','funk','disco','new wave','punk','hard rock','singer-songwriter','hip hop','electronic','country','jazz','metal'];
+  const q = n => `https://musicbrainz.org/ws/2/release-group?fmt=json&limit=100&offset=${n}&query=` + encodeURIComponent(`firstreleasedate:[${decade} TO ${decade + 9}] AND primarytype:album AND tag:"${tags[Math.floor(Math.random() * tags.length)]}"`);
+  try { let j = await (await fetch(q(Math.floor(Math.random() * 150)))).json();
+    if (!j['release-groups']?.length) j = await (await fetch(q(0))).json();
+    const ids = shuffle((j['release-groups'] || []).map(g => g.id)); const glows = ['#ff2bd6','#22f3ff','#ffcf3f']; let shown = 0;
+    for (const id of ids) { if (shown >= 8 || decade !== coverDecade) break;
+      const img = new Image(); img.alt = ''; img.referrerPolicy = 'no-referrer';
+      const ok = await new Promise(res => { img.onload = () => res(true); img.onerror = () => res(false); img.src = `https://coverartarchive.org/release-group/${id}/front-250`; setTimeout(() => res(false), 6000) });
+      if (!ok || decade !== coverDecade) continue;
+      const d = document.createElement('div'), size = 90 + Math.random() * 70; d.className = 'fly cover'; d.append(img);
+      d.style.cssText = `left:${Math.random() * 90}%;width:${size}px;height:${size}px;--d:${16 + Math.random() * 12}s;--delay:${-Math.random() * 20}s;--dx:${(Math.random() - .5) * 40}vw;--rot:${(Math.random() < .5 ? -1 : 1) * (40 + Math.random() * 140)}deg;--glow:${glows[shown % 3]}`;
+      sky.append(d); shown++ }
+  } catch (e) { console.warn('Fikk ikke hentet LP-cover', e) }
+}
+async function boot(){ launchDice();
   if (SUPABASE_URL) { await new Promise((ok, no) => { const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js'; s.onload = ok; s.onerror = no; document.head.append(s) });
     api = supabaseAdapter(supabase.createClient(SUPABASE_URL, SUPABASE_KEY)) } else api = localAdapter();
   window.addEventListener('hashchange', onRoute); onRoute();
