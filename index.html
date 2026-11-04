@@ -243,7 +243,7 @@ async function playerSongs(){ const e = document.getElementById('e'), d = st.roo
     if (!g('a') || !g('t')) return e.textContent = `Fyll inn artist og tittel på låt ${i+1}.`;
     if (!(y >= d && y <= d + 9)) return e.textContent = `Låt ${i+1} må være fra ${d}–${d+9}.`;
     songs.push({artist:g('a'), title:g('t'), year:y, yt:id}) }
-  try { document.activeElement?.blur(); await api.addSongs(st.room.id, me().id, songs); lastKey = ''; refresh() } catch (x) { e.textContent = x.message } }
+  try { document.activeElement?.blur(); await api.addSongs(st.room.id, me().id, songs); ls.set(draftKey(), '{}'); lastKey = ''; refresh() } catch (x) { e.textContent = x.message } }
 async function playerVote(score){ try { await api.vote(st.room.id, me().id, curSong().id, score); refresh() } catch (x) { alert(x.message) } }
 
 function playerView(){
@@ -279,6 +279,12 @@ async function refresh(){
   busy = false; render(); if (again) { again = false; refresh() }
 }
 let lastKey = '';
+// Kladd: det deltakeren skriver lagres fortløpende, så ingenting forsvinner ved feil eller ny innlasting
+const draftKey = () => 'mk.draft.' + (st?.room?.code || '');
+function restoreDraft(){ let d = {}; try { d = JSON.parse(ls.get(draftKey())) || {} } catch {}
+  document.querySelectorAll('#app input[id]').forEach(i => { if (d[i.id] != null && !i.value) i.value = d[i.id] }) }
+document.addEventListener('input', e => { const i = e.target; if (route.view === 'vert' || !st || !i.id || i.closest('#app') === null) return;
+  let d = {}; try { d = JSON.parse(ls.get(draftKey())) || {} } catch {} d[i.id] = i.value; ls.set(draftKey(), JSON.stringify(d)) });
 function render(){
   const el = document.getElementById('app'); document.body.classList.toggle('host', route.view === 'vert');
   if (!route.code) { document.getElementById('ytwrap').hidden = true; el.innerHTML = homeView(); return }
@@ -289,6 +295,7 @@ function render(){
   const typing = route.view !== 'vert' && st.room.phase === 'lobby' && el.contains(document.activeElement) && document.activeElement.tagName === 'INPUT';
   if (typing) return; lastKey = key;
   el.innerHTML = route.view === 'vert' ? hostView() : playerView();
+  if (route.view !== 'vert') restoreDraft();
   if (route.view === 'vert') { syncVideo(); hostAuto();
     const q = document.getElementById('qr'); if (q && window.QRCode) new QRCode(q, {text:location.href.split('#')[0] + '#/spel/' + st.room.code, width:320, height:320}) }
 }
