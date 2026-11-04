@@ -145,6 +145,13 @@ const ranking = () => st.room.order.slice(0, st.room.phase === 'done' ? undefine
   .sort((a, b) => b.avg - a.avg || b.six - a.six);
 const PITCH = ['Overbevis oss!', 'Hvorfor fortjener denne en sekser?', 'Selg den inn!', 'Hva er historien bak?', 'Gi oss ett godt argument!'];
 
+// YouTube lager en midlertidig spilleliste av video-ID-ene. Den kan lagres i YouTube med kåringsnavnet.
+function playlistBtn(songs, label = 'Åpne alle låtene som YouTube-spilleliste'){
+  if (!songs.length) return '';
+  const url = 'https://www.youtube.com/watch_videos?video_ids=' + songs.slice(0, 50).map(s => s.yt).join(',');
+  return `<a href="${url}" target="_blank" rel="noopener" style="display:block;margin-top:10px"><button class="ghost" style="width:100%">▶ ${label}</button></a>
+    <p class="muted center" style="margin:6px 0 0">Lagre den i YouTube og kall den «${esc(st.room.name)}».</p>`;
+}
 function resultsHtml(){
   const r = ranking(); if (!r.length) return '';
   return r.map((x, i) => `<div class="card song"><span class="rank">${i+1}</span><div style="flex:1;min-width:0"><b>${esc(x.s.title)}</b><span class="muted">${esc(x.s.artist)} · ${x.s.year} · ${esc(owner(x.s)?.name)}</span>
@@ -201,9 +208,9 @@ function hostView(){
     return head + `<div class="split"><div class="card center"><h2 style="margin-top:0">Inviter deltakerne</h2><p class="muted">Skann QR-koden med mobilkameraet for å bli med.</p>
       <div id="qr"></div></div>
       <div class="card"><h2 style="margin-top:0">Deltakere (${ready.length} klare)</h2>${st.players.map(p => `<div class="song"><span>${esc(p.name)}</span><span class="pill">${st.songs.filter(x => x.player_id === p.id).length ? '✓ låter inne' : 'legger inn låter…'}</span></div>`).join('') || '<p class="muted">Venter på deltakere…</p>'}
-      <button style="width:100%;margin-top:14px" ${ready.length < 2 ? 'disabled' : ''} onclick="hostStart()">▶ Start kåringen (${st.songs.length} låter)</button></div></div>`;
+      <button style="width:100%;margin-top:14px" ${ready.length < 2 ? 'disabled' : ''} onclick="hostStart()">▶ Start kåringen (${st.songs.length} låter)</button>${playlistBtn(st.songs)}</div></div>`;
   }
-  if (room.phase === 'done') return head + `<h2>🏆 Endelig resultat</h2>` + resultsHtml();
+  if (room.phase === 'done') return head + `<h2>🏆 Endelig resultat</h2>` + resultsHtml() + playlistBtn(ranking().map(x => x.s), 'Åpne vinnerlisten på YouTube');
   const n = `<span class="pill">Låt ${room.idx+1} av ${room.order.length}</span>`;
   const by = esc(owner(s)?.name);
   if (room.phase === 'pitch') return head + `<div class="card pitch pop">${n}<p class="muted" style="margin-top:1.2em">Neste låt</p>
@@ -255,7 +262,7 @@ function playerView(){
       ${[0,1,2].map(i => `<div class="muted">Låt ${i+1}</div><input id="u${i}" type="url" inputmode="url" placeholder="YouTube-lenke"><div class="row"><input id="a${i}" placeholder="Artist"><input id="t${i}" placeholder="Tittel"></div><input id="y${i}" type="number" inputmode="numeric" placeholder="År (${room.decade}–${room.decade+9})">`).join('')}
       <div id="e" class="err"></div><button onclick="playerSongs()">Send inn låtene</button></div>`;
   }
-  if (room.phase === 'done') return head + who + `<h2>🏆 Endelig resultat</h2>` + resultsHtml();
+  if (room.phase === 'done') return head + who + `<h2>🏆 Endelig resultat</h2>` + resultsHtml() + playlistBtn(ranking().map(x => x.s), 'Åpne vinnerlisten på YouTube');
   const s = curSong(), mine = s.player_id === p.id, v = st.votes.find(v => v.player_id === p.id && v.song_id === s.id), used = sixesUsed(p.id);
   const info = `<div class="card center"><span class="pill">Låt ${room.idx+1} av ${room.order.length}</span><h2>${esc(s.title)}</h2><div class="muted">${esc(s.artist)} · ${s.year}</div><div class="muted">Nominert av ${esc(owner(s)?.name)}</div></div>`;
   const sixes = `<div class="center"><span class="muted">Seksere igjen: </span>${[0,1].map(i => `<span class="die small six" style="opacity:${i < MAX_SIX - used ? 1 : .2}">${dieSvg(6)}</span>`).join(' ')}</div>`;
