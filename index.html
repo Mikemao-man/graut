@@ -98,6 +98,7 @@ function localAdapter(){
       const mine = d.votes.filter(v => v.player_id === player_id);
       if (score === 6 && mine.filter(v => v.score === 6 && v.song_id !== song_id).length >= MAX_SIX) throw new Error('Du har brukt begge seksene.');
       const v = mine.find(v => v.song_id === song_id); if (v) v.score = score; else d.votes.push({room_id, player_id, song_id, score}); write(d) },
+    async listRooms(){ const d = read(); return d.rooms.slice().reverse().slice(0, 30).map(room => ({room, songs:d.songs.filter(s => s.room_id === room.id), votes:d.votes.filter(v => v.room_id === room.id)})) },
     subscribe(room_id, f){ subs.add(f); return () => subs.delete(f) }
   };
 }
@@ -107,6 +108,9 @@ function supabaseAdapter(sb){
   const one = async q => { const {data, error} = await q; if (error) throw new Error(error.message); return data };
   return {
     async createRoom(r){ return one(sb.from('rooms').insert({code:newCode(), phase:'lobby', idx:0, order:[], ...r}).select().single()) },
+    async listRooms(){ const rooms = await one(sb.from('rooms').select().order('created_at', {ascending:false}).limit(30)); if (!rooms.length) return [];
+      const ids = rooms.map(r => r.id); const [songs, votes] = await Promise.all(['songs','votes'].map(t => one(sb.from(t).select().in('room_id', ids))));
+      return rooms.map(room => ({room, songs:songs.filter(s => s.room_id === room.id), votes:votes.filter(v => v.room_id === room.id)})) },
     async loadState(code){ const room = await one(sb.from('rooms').select().eq('code', code).maybeSingle()); if (!room) return null;
       const [players, songs, votes] = await Promise.all(['players','songs','votes'].map(t => one(sb.from(t).select().eq('room_id', room.id))));
       return {room, players, songs, votes} },
@@ -139,6 +143,9 @@ const votesFor = s => st.votes.filter(v => v.song_id === s.id);
 const eligible = s => st.players.filter(p => st.songs.some(x => x.player_id === p.id));
 const sixesUsed = pid => st.votes.filter(v => v.player_id === pid && v.score === 6).length;
 const avgOf = s => { const v = votesFor(s); return v.length ? v.reduce((a, b) => a + b.score, 0) / v.length : 0 };
+const rankSongs = (songs, votes) => songs.map(s => { const v = votes.filter(x => x.song_id === s.id); return {s, avg:v.length ? v.reduce((a, b) => a + b.score, 0) / v.length : 0, six:v.filter(x => x.score === 6).length} })
+  .sort((a, b) => b.avg - a.avg || b.six - a.six).map(x => x.s);
+const playlistUrl = songs => 'https://www.youtube.com/watch_videos?video_ids=' + songs.slice(0, 50).map(s => s.yt).join(',');
 const ranking = () => st.room.order.slice(0, st.room.phase === 'done' ? undefined : st.room.idx + (st.room.phase === 'reveal' ? 1 : 0))
   .map(id => st.songs.find(s => s.id === id)).filter(Boolean)
   .map(s => ({s, avg:avgOf(s), n:votesFor(s).length, six:votesFor(s).filter(v => v.score === 6).length}))
@@ -146,10 +153,10 @@ const ranking = () => st.room.order.slice(0, st.room.phase === 'done' ? undefine
 const PITCH = ['Overbevis oss!', 'Hvorfor fortjener denne en sekser?', 'Selg den inn!', 'Hva er historien bak?', 'Gi oss ett godt argument!'];
 
 // YouTube lager en midlertidig spilleliste av video-ID-ene. Den kan lagres i YouTube med kåringsnavnet.
-function playlistBtn(songs, label = 'Åpne alle låtene som YouTube-spilleliste'){
+function playlistBtn(songs, label = 'Åpne alle låtene som YouTube-spilleliste', red = false){
   if (!songs.length) return '';
-  const url = 'https://www.youtube.com/watch_videos?video_ids=' + songs.slice(0, 50).map(s => s.yt).join(',');
-  return `<a href="${url}" target="_blank" rel="noopener" style="display:block;margin-top:10px"><button class="ghost" style="width:100%">▶ ${label}</button></a>
+  const url = playlistUrl(songs);
+  return `<a href="${url}" target="_blank" rel="noopener" style="display:block;margin-top:10px"><button class="${red ? '' : 'ghost'}" style="width:100%;${red ? 'background:#ff0033;color:#fff' : ''}">▶ ${label}</button></a>
     <p class="muted center" style="margin:6px 0 0">Lagre den i YouTube og kall den «${esc(st.room.name)}».</p>`;
 }
 function resultsHtml(){
@@ -169,9 +176,17 @@ function homeView(){
     <label>Velg tiår<select id="pd">${decades.map(d => `<option value="${d}" ${d===1980?'selected':''}>${d}-tallet</option>`).join('')}</select></label>
     <div id="e" class="err"></div>
     <button onclick="createRoom()">Opprett kåring</button></div>
-  ${myRooms().length ? `<h2>Dine kåringer</h2>` + myRooms().map(c => `<div class="card song"><span>${esc(c.name)}</span><button class="ghost" onclick="go('vert/${c.code}')">Åpne</button></div>`).join('') : ''}
+  <div id="saved"></div>
   ${SUPABASE_URL ? '' : '<p class="muted">Testmodus: uten database fungerer dette bare mellom faner i samme nettleser.</p>'}`;
 }
+const PHASE = {lobby:'Venter på deltakere', done:'Ferdig'};
+async function loadSaved(){ const el = document.getElementById('saved'); if (!el) return;
+  try { const list = (await api.listRooms()).filter(x => x.songs.length); if (!list.length || !document.getElementById('saved')) return;
+    el.innerHTML = `<h2>Kåringer</h2>` + list.map(({room, songs, votes}) => { const done = room.phase === 'done';
+      return `<div class="card"><div class="song"><div style="min-width:0"><b>${esc(room.name)}</b><span class="muted">${room.decade}-tallet · ${songs.length} låter · ${PHASE[room.phase] || 'Pågår'}</span></div>
+        <button class="ghost" style="flex:none" onclick="go('vert/${room.code}')">Åpne</button></div>
+        <a href="${playlistUrl(done ? rankSongs(songs, votes) : songs)}" target="_blank" rel="noopener" style="display:block;margin-top:10px"><button style="width:100%;background:#ff0033;color:#fff">▶ ${done ? 'Vinnerlisten på YouTube' : 'Alle låtene på YouTube'}</button></a></div>` }).join('');
+  } catch (e) { console.error(e) } }
 function myRooms(){ try { return JSON.parse(ls.get('mk.mine')) || [] } catch { return [] } }
 async function createRoom(){
   try { const r = await api.createRoom({name:document.getElementById('pn').value.trim() || 'Graut kåringen', decade:+document.getElementById('pd').value});
@@ -210,7 +225,7 @@ function hostView(){
       <div class="card"><h2 style="margin-top:0">Deltakere (${ready.length} klare)</h2>${st.players.map(p => `<div class="song"><span>${esc(p.name)}</span><span class="pill">${st.songs.filter(x => x.player_id === p.id).length ? '✓ låter inne' : 'legger inn låter…'}</span></div>`).join('') || '<p class="muted">Venter på deltakere…</p>'}
       <button style="width:100%;margin-top:14px" ${ready.length < 2 ? 'disabled' : ''} onclick="hostStart()">▶ Start kåringen (${st.songs.length} låter)</button>${playlistBtn(st.songs)}</div></div>`;
   }
-  if (room.phase === 'done') return head + `<h2>🏆 Endelig resultat</h2>` + resultsHtml() + playlistBtn(ranking().map(x => x.s), 'Åpne vinnerlisten på YouTube');
+  if (room.phase === 'done') return head + `<h2>🏆 Endelig resultat</h2>` + playlistBtn(ranking().map(x => x.s), 'Vinnerlisten på YouTube', true) + resultsHtml();
   const n = `<span class="pill">Låt ${room.idx+1} av ${room.order.length}</span>`;
   const by = esc(owner(s)?.name);
   if (room.phase === 'pitch') return head + `<div class="card pitch pop">${n}<p class="muted" style="margin-top:1.2em">Neste låt</p>
@@ -262,7 +277,7 @@ function playerView(){
       ${[0,1,2].map(i => `<div class="muted">Låt ${i+1}</div><input id="u${i}" type="url" inputmode="url" placeholder="YouTube-lenke"><div class="row"><input id="a${i}" placeholder="Artist"><input id="t${i}" placeholder="Tittel"></div><input id="y${i}" type="number" inputmode="numeric" placeholder="År (${room.decade}–${room.decade+9})">`).join('')}
       <div id="e" class="err"></div><button onclick="playerSongs()">Send inn låtene</button></div>`;
   }
-  if (room.phase === 'done') return head + who + `<h2>🏆 Endelig resultat</h2>` + resultsHtml() + playlistBtn(ranking().map(x => x.s), 'Åpne vinnerlisten på YouTube');
+  if (room.phase === 'done') return head + who + `<h2>🏆 Endelig resultat</h2>` + playlistBtn(ranking().map(x => x.s), 'Vinnerlisten på YouTube', true) + resultsHtml();
   const s = curSong(), mine = s.player_id === p.id, v = st.votes.find(v => v.player_id === p.id && v.song_id === s.id), used = sixesUsed(p.id);
   const info = `<div class="card center"><span class="pill">Låt ${room.idx+1} av ${room.order.length}</span><h2>${esc(s.title)}</h2><div class="muted">${esc(s.artist)} · ${s.year}</div><div class="muted">Nominert av ${esc(owner(s)?.name)}</div></div>`;
   const sixes = `<div class="center"><span class="muted">Seksere igjen: </span>${[0,1].map(i => `<span class="die small six" style="opacity:${i < MAX_SIX - used ? 1 : .2}">${dieSvg(6)}</span>`).join(' ')}</div>`;
@@ -292,7 +307,7 @@ document.addEventListener('input', e => { const i = e.target; if (route.view ===
   let d = {}; try { d = JSON.parse(ls.get(draftKey())) || {} } catch {} d[i.id] = i.value; ls.set(draftKey(), JSON.stringify(d)) });
 function render(){
   const el = document.getElementById('app'); document.body.classList.toggle('host', route.view === 'vert');
-  if (!route.code) { document.getElementById('ytwrap').hidden = true; el.innerHTML = homeView(); return }
+  if (!route.code) { document.getElementById('ytwrap').hidden = true; el.innerHTML = homeView(); loadSaved(); return }
   if (!st) { el.innerHTML = `<h1>Fant ikke rommet ${esc(route.code)}</h1><button onclick="go('')">Tilbake</button>`; return }
   const key = JSON.stringify([route.view, st.room.phase, st.room.idx, st.players.length, st.songs.length, st.votes]);
   if (key === lastKey) return;
