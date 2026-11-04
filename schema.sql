@@ -35,12 +35,9 @@ create index votes_room on votes(room_id);
 create index votes_song on votes(song_id);
 create index players_room on players(room_id);
 
--- Maks to seksarar per deltakar, og ingen stemme på eigen låt
+-- Maks to seksere per deltaker (man kan stemme på egen låt)
 create function check_vote() returns trigger language plpgsql set search_path = public as $$
 begin
-  if exists (select 1 from songs where id = new.song_id and player_id = new.player_id) then
-    raise exception 'Du kan ikke stemme på din egen låt';
-  end if;
   if new.score = 6 and (select count(*) from votes where player_id = new.player_id and score = 6 and song_id <> new.song_id) >= 2 then
     raise exception 'Du har brukt begge seksene';
   end if;

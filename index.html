@@ -136,7 +136,7 @@ const ytId = u => { const m = String(u).match(/(?:youtu\.be\/|[?&]v=|\/(?:embed|
 const curSong = () => st && st.songs.find(s => s.id === st.room.order[st.room.idx]);
 const owner = s => st.players.find(p => p.id === s.player_id);
 const votesFor = s => st.votes.filter(v => v.song_id === s.id);
-const eligible = s => st.players.filter(p => p.id !== s.player_id && st.songs.some(x => x.player_id === p.id));
+const eligible = s => st.players.filter(p => st.songs.some(x => x.player_id === p.id));
 const sixesUsed = pid => st.votes.filter(v => v.player_id === pid && v.score === 6).length;
 const avgOf = s => { const v = votesFor(s); return v.length ? v.reduce((a, b) => a + b.score, 0) / v.length : 0 };
 const ranking = () => st.room.order.slice(0, st.room.phase === 'done' ? undefined : st.room.idx + (st.room.phase === 'reveal' ? 1 : 0))
@@ -263,7 +263,6 @@ function playerView(){
   const sixes = `<div class="center"><span class="muted">Seksere igjen: </span>${[0,1].map(i => `<span class="die small six" style="opacity:${i < MAX_SIX - used ? 1 : .2}">${dieSvg(6)}</span>`).join(' ')}</div>`;
   if (room.phase === 'pitch') return head + who + info + (mine ? `<div class="card pitch pop"><div class="by">🎤 Din tur!</div><div class="cta">Selg inn låten din til de andre.</div></div>` : `<p class="center">🎤 ${esc(owner(s)?.name)} selger inn låten…</p>`) + sixes;
   if (room.phase === 'play') return head + who + info + `<p class="center">🎧 Lytt på storskjermen…</p>${mine ? '<p class="center muted">Dette er låten din.</p>' : ''}${sixes}`;
-  if (mine) return head + who + info + `<p class="center muted">Dette er låten din, så du kaster ikke terning på den.</p>`;
   if (room.phase === 'vote') return head + who + info + `<h2 class="center">Kast terningen!</h2>
     <div class="dice">${[1,2,3,4,5,6].map(n => { const sel = v?.score === n, block = n === 6 && !sel && used >= MAX_SIX;
       return `<button class="die big ${sel ? 'sel' : ''} ${n === 6 ? 'six' : ''}" ${block ? 'disabled' : ''} aria-label="Terningkast ${n}" onclick="playerVote(${n})">${dieSvg(n)}</button>` }).join('')}</div>
