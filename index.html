@@ -55,7 +55,7 @@ button:disabled{opacity:.4;cursor:not-allowed}
 .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent))}
 #qr:empty{display:none}
 #qr{background:#fff;padding:10px;border-radius:10px;display:inline-block}
-#qr img,#qr canvas{display:block;width:160px;height:160px}
+#qr img,#qr canvas{display:block;width:min(280px,70vw);height:min(280px,70vw)}
 .center{text-align:center}
 .split{display:grid;gap:16px}
 @media(min-width:900px){body.host .split{grid-template-columns:2fr 1fr}}
@@ -157,7 +157,7 @@ function homeView(){
   return `<h1>🎲 Graut kåringen</h1>
   <p class="muted">Hver deltaker legger inn ${SONGS} YouTube-videoer fra et valgt tiår. Før hver låt selger den som nominerte den, inn låten. Så spilles videoen én gang på storskjermen, og alle gir terningkast fra sin egen mobil med en gang. Maks ${MAX_SIX} seksere hver.</p>
   <div class="card"><h2 style="margin-top:0">Ny kåring</h2>
-    <p class="muted" style="margin-top:0">For den som styrer kåringen. Deltakerne får en lenke på Messenger og trenger ikke gjøre noe her.</p>
+    <p class="muted" style="margin-top:0">For den som styrer kåringen. Deltakerne blir med ved å skanne QR-koden på storskjermen.</p>
     <label>Navn på kåringen<input id="pn" placeholder="f.eks. Fredagskåring"></label>
     <label>Velg tiår<select id="pd">${decades.map(d => `<option value="${d}" ${d===1980?'selected':''}>${d}-tallet</option>`).join('')}</select></label>
     <div id="e" class="err"></div>
@@ -198,10 +198,8 @@ function hostView(){
   const head = `<div class="row" style="justify-content:space-between"><div><h1>${esc(room.name)}</h1><span class="pill">${room.decade}–${room.decade+9}</span></div></div>`;
   if (room.phase === 'lobby') {
     const ready = st.players.filter(p => st.songs.some(x => x.player_id === p.id));
-    return head + `<div class="split"><div class="card center"><h2 style="margin-top:0">Inviter deltakerne</h2><p class="muted">Send lenken i Messenger, eller la folk skanne QR-koden med mobilen.</p>
-      <div id="qr"></div><p class="muted" style="word-break:break-all">${esc(link)}</p>
-      <div class="row"><a href="fb-messenger://share?link=${encodeURIComponent(location.href.split('#')[0] + '#/spel/' + room.code)}" style="flex:1"><button style="width:100%;background:#0a7cff;color:#fff">💬 Send i Messenger</button></a>
-      <button class="ghost" onclick="shareInvite()">Del / kopier tekst</button></div></div>
+    return head + `<div class="split"><div class="card center"><h2 style="margin-top:0">Inviter deltakerne</h2><p class="muted">Skann QR-koden med mobilkameraet for å bli med.</p>
+      <div id="qr"></div></div>
       <div class="card"><h2 style="margin-top:0">Deltakere (${ready.length} klare)</h2>${st.players.map(p => `<div class="song"><span>${esc(p.name)}</span><span class="pill">${st.songs.filter(x => x.player_id === p.id).length ? '✓ låter inne' : 'legger inn låter…'}</span></div>`).join('') || '<p class="muted">Venter på deltakere…</p>'}
       <button style="width:100%;margin-top:14px" ${ready.length < 2 ? 'disabled' : ''} onclick="hostStart()">▶ Start kåringen (${st.songs.length} låter)</button></div></div>`;
   }
